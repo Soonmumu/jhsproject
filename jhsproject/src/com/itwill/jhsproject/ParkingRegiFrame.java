@@ -51,10 +51,10 @@ public class ParkingRegiFrame extends JFrame {
 		lblParkingArea.setBounds(23, 21, 139, 30);
 		contentPane.add(lblParkingArea);
 		
-		JLabel lblCarNumber = new JLabel("차 량 번 호");
-		lblCarNumber.setFont(new Font("D2Coding", Font.BOLD, 25));
-		lblCarNumber.setBounds(23, 73, 139, 30);
-		contentPane.add(lblCarNumber);
+		JLabel lblCarNum = new JLabel("차 량 번 호");
+		lblCarNum.setFont(new Font("D2Coding", Font.BOLD, 25));
+		lblCarNum.setBounds(23, 73, 139, 30);
+		contentPane.add(lblCarNum);
 		
 		JLabel lblReduction = new JLabel("감 면 종 류");
 		lblReduction.setFont(new Font("D2Coding", Font.BOLD, 25));
