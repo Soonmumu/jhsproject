@@ -1,29 +1,64 @@
 package com.itwill.jhsproject;
 
+import static com.itwill.jhsproject.OracleJdbc.PASSWORD;
+import static com.itwill.jhsproject.OracleJdbc.URL;
+import static com.itwill.jhsproject.OracleJdbc.USER;
+
+import java.awt.Component;
 import java.awt.EventQueue;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+
+import com.itwill.jhsproject.ParkingReduction.Entity;
+
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+
 import java.awt.Font;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+
 import javax.swing.JTextField;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.ComboBoxModel;
+import javax.swing.DefaultComboBoxModel;
 
 public class ParkingRegiFrame extends JFrame {
+	
+	public interface RegiSuccess {
+		void notifyRegiSuccess();
+	}
 
 	private static final long serialVersionUID = 1L;
 	private JPanel contentPane;
-	private String parkingArea;
 	private JTextField parkingAreaField;
 	private JTextField carNumField;
+	private JComboBox reductionCombo;
+	private JButton btnCancel;
+	private JButton btnRegister;
+	private JLabel lblReduction;
+	private JLabel lblCarNum;
+	private JLabel lblParkingArea;
 
-	public static void ShowParkngRegiFrame(String parkingArea) {
+	private ParkingDao dao;
+	private Component parentComponent;
+	private String parkingArea;
+	private ParkingMainView app;
+	private String[] reduName = {"해당없음", "경차 - 50%", "다자녀 2인 - 30%", "다자녀 3인 - 50%", 
+			"저공해 1,2종 - 50% ", "저공해 3종 - 30%", "긴급/군 차량 - 면제"};
+	
+	public static void showParkingRegiFrame(Component parentComponent, String parkingArea, ParkingMainView app) {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
-					ParkingRegiFrame frame = new ParkingRegiFrame(parkingArea);
+					ParkingRegiFrame frame = new ParkingRegiFrame(parentComponent, parkingArea, app);
 					frame.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();
@@ -32,36 +67,40 @@ public class ParkingRegiFrame extends JFrame {
 		});
 	}
 	
-	private ParkingRegiFrame(String parkingArea) {
+	private ParkingRegiFrame(Component parentComponent, String parkingArea, ParkingMainView app) {
+		dao = ParkingDao.INSTANCE;
+		this.parentComponent = parentComponent;
 		this.parkingArea = parkingArea;
+		this.app = app;
 		initialize();
 	}
 	
 	private void initialize() {
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		setBounds(100, 100, 460, 279);
+		setLocationRelativeTo(parentComponent);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 
 		setContentPane(contentPane);
 		contentPane.setLayout(null);
 		
-		JLabel lblParkingArea = new JLabel("주 차 구 역");
+		lblParkingArea = new JLabel("주 차 구 역");
 		lblParkingArea.setFont(new Font("D2Coding", Font.BOLD, 25));
 		lblParkingArea.setBounds(23, 21, 139, 30);
 		contentPane.add(lblParkingArea);
 		
-		JLabel lblCarNum = new JLabel("차 량 번 호");
+		lblCarNum = new JLabel("차 량 번 호");
 		lblCarNum.setFont(new Font("D2Coding", Font.BOLD, 25));
 		lblCarNum.setBounds(23, 73, 139, 30);
 		contentPane.add(lblCarNum);
 		
-		JLabel lblReduction = new JLabel("감 면 종 류");
+		lblReduction = new JLabel("감 면 종 류");
 		lblReduction.setFont(new Font("D2Coding", Font.BOLD, 25));
 		lblReduction.setBounds(23, 125, 139, 30);
 		contentPane.add(lblReduction);
 		
-		parkingAreaField = new JTextField();
+		parkingAreaField = new JTextField(parkingArea);
 		parkingAreaField.setEditable(false);
 		parkingAreaField.setFont(new Font("D2Coding", Font.PLAIN, 20));
 		parkingAreaField.setBounds(174, 19, 248, 41);
@@ -74,20 +113,55 @@ public class ParkingRegiFrame extends JFrame {
 		carNumField.setBounds(174, 73, 248, 41);
 		contentPane.add(carNumField);
 		
-		JButton btnRegister = new JButton("확 인");
+		btnRegister = new JButton("확 인");
+		btnRegister.addActionListener(e -> createNewParking());
 		btnRegister.setFont(new Font("D2Coding", Font.BOLD, 25));
 		btnRegister.setBounds(89, 192, 115, 41);
 		contentPane.add(btnRegister);
 		
-		JButton btnCancel = new JButton("취 소");
+		btnCancel = new JButton("취 소");
 		btnCancel.addActionListener(e -> dispose());
 		btnCancel.setFont(new Font("D2Coding", Font.BOLD, 25));
 		btnCancel.setBounds(227, 192, 115, 41);
 		contentPane.add(btnCancel);
 		
-		JComboBox reductionCombo = new JComboBox();
+		reductionCombo = new JComboBox<>();
+		reductionCombo.setModel(new DefaultComboBoxModel(reduName));
 		reductionCombo.setFont(new Font("D2Coding", Font.PLAIN, 20));
 		reductionCombo.setBounds(174, 125, 248, 41);
 		contentPane.add(reductionCombo);
+	}
+	
+	private void createNewParking() {
+		String carNumber = carNumField.getText();
+		Long carEntrance = System.currentTimeMillis();
+		Integer numberReduction = reductionCombo.getSelectedIndex() + 1;
+		
+		if(carNumber.equals("")) {
+			JOptionPane.showMessageDialog(contentPane, "차량번호를 입력해주세요.", 
+					"경고", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		
+		ParkingInfo pInfo = ParkingInfo.builder().cNum(carNumber).cEntra(carEntrance).cNredu(numberReduction).
+				cExit(null).pTime(null).cPfee(null).build();
+		ParkingArea pArea = ParkingArea.builder().pCheck(1).cNum(carNumber).pArea(parkingArea).build();
+		
+		int resultInfo = dao.regiInfo(pInfo);
+		int resultArea = dao.regiArea(pArea);
+		
+		if(resultInfo == 2 ) {
+			JOptionPane.showMessageDialog(contentPane, 
+					"이미 등록된 차량입니다.", "실패", JOptionPane.ERROR_MESSAGE);
+		} 
+		if(resultInfo == 1 && resultArea == 1) {
+			JOptionPane.showMessageDialog(contentPane, 
+					"입차 등록 완료!\n입차시간 : " + carEntrance, "완료", JOptionPane.INFORMATION_MESSAGE);
+			app.notifyRegiSuccess();
+			dispose();
+		} else {
+			JOptionPane.showMessageDialog(contentPane, 
+					"입차 등록 실패!", "실패", JOptionPane.ERROR_MESSAGE);
+		}
 	}
 }
